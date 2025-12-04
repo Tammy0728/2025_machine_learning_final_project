@@ -1,0 +1,136 @@
+import torch
+import torch.nn as nn
+import torch.optim as optim
+import matplotlib.pyplot as plt
+
+# =========================================================
+# 1. 建立資料（隨機）
+# =========================================================
+
+N = 2000
+num_features = 3
+num_labels = 3
+
+X = torch.randn(N, num_features)
+y = torch.randint(0, 2, (N, num_labels)).float()
+
+# 你的 4 筆資料：第 1 筆放 test，其餘三筆放 train
+x_test_example = torch.tensor([[120.0, 150.0, 0.7]])
+y_test_example = torch.tensor([[0.0, 1.0, 1.0]])
+
+X_examples_train = torch.tensor([
+    [ 70.0,  40.0, 0.9],
+    [ 60.0,  30.0, 0.1],
+    [100.0, 130.0, 0.2],
+])
+
+y_examples_train = torch.tensor([
+    [0.0, 1.0, 0.0],
+    [1.0, 0.0, 0.0],
+    [1.0, 0.0, 1.0],
+])
+
+# =========================================================
+# 2. 分成 train / validation / test
+# =========================================================
+
+num_train = int(0.7 * N)
+num_val   = int(0.15 * N)
+num_test  = N - num_train - num_val
+
+X_train_rand = X[:num_train]
+y_train_rand = y[:num_train]
+
+X_val = X[num_train:num_train+num_val]
+y_val = y[num_train:num_train+num_val]
+
+X_test_rand = X[num_train+num_val:]
+y_test_rand = y[num_train+num_val:]
+
+# train 加入 3 筆例子
+X_train = torch.cat([X_train_rand, X_examples_train], dim=0)
+y_train = torch.cat([y_train_rand, y_examples_train], dim=0)
+
+# test 加入第 1 筆例子
+X_test = torch.cat([X_test_rand, x_test_example], dim=0)
+y_test = torch.cat([y_test_rand, y_test_example], dim=0)
+
+print("Train size:", X_train.shape)
+print("Val size:", X_val.shape)
+print("Test size:", X_test.shape)
+
+# =========================================================
+# 3. 定義 2 層弱模型
+# =========================================================
+
+class EmotionModel(nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(num_features, 8),   # 小 hidden layer
+            nn.ReLU(),
+            nn.Linear(8, num_labels),     # output layer
+            nn.Sigmoid()
+        )
+
+    def forward(self, x):
+        return self.net(x)
+
+model = EmotionModel()
+
+criterion = nn.BCELoss()
+optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+# =========================================================
+# 4. 訓練 (Epoch = 500)
+# =========================================================
+
+epochs = 500
+train_loss_history = []
+val_loss_history = []
+
+for epoch in range(epochs):
+    # training
+    model.train()
+    optimizer.zero_grad()
+    pred_train = model(X_train)
+    loss_train = criterion(pred_train, y_train)
+    loss_train.backward()
+    optimizer.step()
+    train_loss_history.append(loss_train.item())
+
+    # validation
+    model.eval()
+    with torch.no_grad():
+        pred_val = model(X_val)
+        loss_val = criterion(pred_val, y_val)
+        val_loss_history.append(loss_val.item())
+
+    if (epoch+1) % 50 == 0:
+        print(f"Epoch {epoch+1}, Train Loss={loss_train.item():.4f}, Val Loss={loss_val.item():.4f}")
+
+# =========================================================
+# 5. Loss 曲線
+# =========================================================
+
+plt.plot(train_loss_history, label="Training Loss")
+plt.plot(val_loss_history, label="Validation Loss")
+plt.xlabel("Epoch")
+plt.ylabel("Binary Cross Entropy Loss")
+plt.title("Loss Curve")
+plt.legend()
+plt.grid(True)
+plt.show()
+
+# =========================================================
+# 6. 用 test 中的例子做預測
+# =========================================================
+
+model.eval()
+with torch.no_grad():
+    pred_example = model(x_test_example)
+
+print("\n=== Test Example Prediction ===")
+print("Input x =", x_test_example)
+print("True y =", y_test_example)
+print("Pred y* =", pred_example)
